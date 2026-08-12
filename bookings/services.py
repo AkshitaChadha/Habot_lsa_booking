@@ -2,9 +2,9 @@ import uuid
 
 from django.db import transaction
 
-from .models import Booking, LSAProfile
 from .exceptions import BookingConflictError
-from .external_services import create_payment, PaymentGatewayError
+from .external_services import PaymentGatewayError, create_payment
+from .models import Booking, LSAProfile
 
 
 def create_booking(*, parent, lsa, start_time, end_time):
@@ -24,7 +24,7 @@ def create_booking(*, parent, lsa, start_time, end_time):
             Booking.objects
             .select_for_update()
             .filter(
-                lsa=lsa,
+                lsa=locked_lsa,
                 start_time__lt=end_time,
                 end_time__gt=start_time,
             )
@@ -44,12 +44,14 @@ def create_booking(*, parent, lsa, start_time, end_time):
 
         booking = Booking.objects.create(
             parent=parent,
-            lsa=lsa,
+            lsa=locked_lsa,
             start_time=start_time,
             end_time=end_time,
             status=Booking.Status.PENDING_PAYMENT,
         )
 
+    # The database transaction has committed at this point.
+    # Do not hold database locks while waiting for the external gateway.
     transaction_id = str(uuid.uuid4())
 
     try:

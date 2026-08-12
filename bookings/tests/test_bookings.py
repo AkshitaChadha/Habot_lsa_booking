@@ -1,12 +1,11 @@
 from datetime import timedelta
-
-from django.urls import reverse
+from unittest.mock import patch
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from bookings.models import Booking, LSAProfile, Parent, Skill
-from unittest.mock import patch
+
 
 class BookingAPITestCase(APITestCase):
 
@@ -74,6 +73,11 @@ class BookingAPITestCase(APITestCase):
             "1000.00",
         )
 
+        self.assertIn(
+            "transaction_id",
+            call_kwargs,
+        )
+
     def test_create_booking_rejects_invalid_time(self):
         response = self.client.post(
             self.url,
@@ -98,8 +102,12 @@ class BookingAPITestCase(APITestCase):
             status=Booking.Status.PENDING_PAYMENT,
         )
 
-        overlapping_start = self.start_time + timedelta(minutes=30)
-        overlapping_end = self.end_time + timedelta(minutes=30)
+        overlapping_start = (
+            self.start_time + timedelta(minutes=30)
+        )
+        overlapping_end = (
+            self.end_time + timedelta(minutes=30)
+        )
 
         response = self.client.post(
             self.url,
@@ -116,7 +124,10 @@ class BookingAPITestCase(APITestCase):
         )
 
     @patch("bookings.services.create_payment")
-    def test_adjacent_booking_is_allowed(self, mock_create_payment):
+    def test_adjacent_booking_is_allowed(
+        self,
+        mock_create_payment,
+    ):
         Booking.objects.create(
             parent=self.parent,
             lsa=self.lsa,
@@ -143,3 +154,15 @@ class BookingAPITestCase(APITestCase):
         )
 
         mock_create_payment.assert_called_once()
+
+        call_kwargs = mock_create_payment.call_args.kwargs
+
+        self.assertEqual(
+            call_kwargs["booking_id"],
+            response.data["id"],
+        )
+
+        self.assertEqual(
+            call_kwargs["amount"],
+            "1000.00",
+        )
