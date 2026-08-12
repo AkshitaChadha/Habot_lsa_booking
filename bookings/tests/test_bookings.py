@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from bookings.models import Booking, LSAProfile, Parent, Skill
-
+from unittest.mock import patch
 
 class BookingAPITestCase(APITestCase):
 
@@ -42,7 +42,8 @@ class BookingAPITestCase(APITestCase):
             "end_time": end_time or self.end_time,
         }
 
-    def test_create_booking_success(self):
+    @patch("bookings.services.create_payment")
+    def test_create_booking_success(self, mock_create_payment):
         response = self.client.post(
             self.url,
             self.booking_payload(),
@@ -57,6 +58,20 @@ class BookingAPITestCase(APITestCase):
         self.assertEqual(
             response.data["status"],
             Booking.Status.PENDING_PAYMENT,
+        )
+
+        mock_create_payment.assert_called_once()
+
+        call_kwargs = mock_create_payment.call_args.kwargs
+
+        self.assertEqual(
+            call_kwargs["booking_id"],
+            response.data["id"],
+        )
+
+        self.assertEqual(
+            call_kwargs["amount"],
+            "1000.00",
         )
 
     def test_create_booking_rejects_invalid_time(self):
@@ -100,7 +115,8 @@ class BookingAPITestCase(APITestCase):
             status.HTTP_400_BAD_REQUEST,
         )
 
-    def test_adjacent_booking_is_allowed(self):
+    @patch("bookings.services.create_payment")
+    def test_adjacent_booking_is_allowed(self, mock_create_payment):
         Booking.objects.create(
             parent=self.parent,
             lsa=self.lsa,
@@ -125,3 +141,5 @@ class BookingAPITestCase(APITestCase):
             response.status_code,
             status.HTTP_201_CREATED,
         )
+
+        mock_create_payment.assert_called_once()
